@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>chatdemo</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1, maximum-scale=1, user-scalable=no">
+<link href="http://code.liuxinxiu.com/lib/bootstrap/3.3.2/bootstrap.min.css" rel="stylesheet">
+</head>
+<style>
+canvas {
+	border: 5px solid #3300ff;
+}
+#btn a {
+	border: 1px solid #F00;
+	cursor: pointer
+}
+</style>
+<body>
+<canvas id="canvas" width="600" height="400"></canvas>
+<div id="btn"> <a onClick="brush()">画笔</a> <a onClick="rubber()">橡皮</a> <a onClick="cleard()">清空</a> </div>
+<script src="http://code.liuxinxiu.com/lib/jquery/1.9.1/jquery.min.js"></script> 
+<script src="http://code.liuxinxiu.com/lib/bootstrap/3.3.2/bootstrap.min.js"></script> 
+<script>          
+var wsurl='ws://192.168.1.72:8070/webSocket/socketGoogle/Draw/draw-server.php';  //本地IP地址192.168.1.72:8070
+var websocket;  
+var j = 0;  
+/******** 判断是否有webSocket对象 *******/  
+if(window.WebSocket) {  
+    websocket=new WebSocket(wsurl);  
+    /******** 连接建立||发起webSocket连接 ********/  
+    websocket.onopen = function(evevt) {  
+        /******** 监听ready状态码 ********/  
+        console.log('websocket.readyState:'+websocket.readyState);  
+        /*********************************************************  
+          值为0值表示该连接尚未建立  
+          值为1表示连接建立和沟通是可能的  
+          值为2表示连接是通过将结束握手  
+          值为3表示连接已关闭或无法打开  
+        *********************************************************/  
+        /******** 判断状态码为1则连接成功即可正常通信********/  
+        if(websocket.readyState==1) {  
+			console.log("Connected to WebSocket server!");
+        }  
+    }  
+    //收到消息  
+    websocket.onmessage = function(event) {  
+        var msg = JSON.parse(event.data); //解析收到的json消息数据  
+        var type = msg.type; // 消息类型  
+
+        if(type == 'usermsg') { 
+			var ardmovMe = msg.newXyData;
+            var typedata = msg.typedata;
+			if(typedata==3) {
+				j = 0;
+				cleard();
+				return;
+			}
+			if(ardmovMe) {
+					j++;
+				    var result = [];
+                    var size = 2;
+                    for (var x = 0; x < Math.ceil(ardmovMe.length / size); x++) {
+                        var start = x * size;
+                        var end = start + size;
+                        result.push(ardmovMe.slice(start, end));
+                    } 
+					if(result.length > 0) {
+						var p1= result[0];
+						
+						if(typedata == 1) { 
+							ctx.save();
+							ctx.beginPath();
+							ctx.moveTo(p1[0],p1[1]);
+							for(i=0;i<result.length;i++) {
+								var v=result[i]; 
+								ctx.lineTo(v[0],v[1]);
+							}
+							ctx.strokeStyle = linecolor;
+							ctx.lineWidth = linw;
+							ctx.lineCap = "round";
+							ctx.stroke();
+						} else if(typedata==2) {  
+							ctx.save();
+							ctx.beginPath();
+							 for(i=0;i<result.length;i++) {
+								var v=result[i]; 
+								ctx.arc(v[0],v[1],8,0,2*Math.PI);  
+							}
+							ctx.clip()  
+							ctx.clearRect(0,0,canvas.width,canvas.height);  
+							ctx.restore(); 
+						} 
+					}
+			}                                              
+        }  
+        if(type == 'system'){  
+			console.log('system data');
+        }  
+        window.location.hash = '#'+j;
+    }  
+
+    //发生错误  
+    websocket.onerror = function(event){   
+        console.log("Connected to WebSocket server error");  
+        window.location.hash = '#'+j;  
+    }  
+
+    //连接关闭  
+    websocket.onclose = function(event){  
+        j=0;  
+        console.log('websocket Connection Closed. ');  
+        window.location.hash = '#'+j;  
+    }  
+} else {  
+    alert('该浏览器不支持web socket');  
+}  
+
+	//画板效果start
+	var msgData = {};
+	var canvas = document.getElementById('canvas');  //获取标签
+	var ctx = canvas.getContext("2d");   
+	var onoff = false;  //按下标记
+	var oldx = -10;
+	var oldy = -10;
+	//设置颜色
+	var linecolor = "black";
+	var linw = 4;
+	var newar = [] ;
+	var ardmov =[];
+	var easer;
+
+	canvas.addEventListener("mousemove",draw,true);  //鼠标移动事件
+	canvas.addEventListener("mousedown",down,false);  //鼠标按下事件
+	canvas.addEventListener("mouseup",up,false);  //鼠标弹起事件
+	
+	function rubber(){ //橡皮
+		easer = 2;
+	}
+	
+	function brush(){ //画笔 
+		easer = 1;
+	}
+
+	function cleard() {//清空
+		ctx.clearRect(0,0,canvas.width,canvas.height);
+		dataMake(0,0,easer=3);
+	}
+
+	//鼠标按下事件
+	function down(event){
+		ardmov = [];
+		onoff = true;
+		oldx = event.pageX - 10;
+		oldy = event.pageY - 10;
+	}
+
+	//鼠标弹起事件
+	function up(){
+		onoff = false;
+		ardmov = [];
+	}
+
+	//鼠标移动事件
+	function draw(event) { 
+		var newx = event.pageX - 10;
+		var newy = event.pageY - 10;
+		if(newx > 595 || newx < 10 || newy > 395 || newy < 10) {
+			onoff = false; 
+		}
+		if (onoff==true && easer==1) { 
+			ctx.beginPath();
+			ctx.moveTo(oldx,oldy);
+			ctx.lineTo(newx,newy);
+			ctx.strokeStyle = linecolor;
+			ctx.lineWidth = linw;
+			ctx.lineCap = "round";
+			ctx.stroke();
+			oldx = newx;
+			oldy = newy; 
+			dataMake(newx,newy,easer=1);
+		}
+		if(onoff==true && easer==2) {//橡皮
+			dataMake(newx,newy,easer=2);
+			ctx.save()  
+			ctx.beginPath()  
+			ctx.arc(newx,newy,8,0,2*Math.PI);  
+			ctx.clip()  
+			ctx.clearRect(0,0,canvas.width,canvas.height);  
+			ctx.restore(); 
+		}
+	}  
+
+	function dataMake(newx,newy,easer) {
+		newar = [newx,newy]; 
+		ardmov.push.apply(ardmov, newar); 
+		msgData.newXyData = ardmov;	
+		msgData.typedata = easer; 		
+		try {    
+			websocket.send(JSON.stringify(msgData));  
+			if(ardmov.length>100){
+				ardmov.splice(0,90); 
+			}
+		} catch(ex) {    
+			console.log(ex);  
+		}
+	}
+//画板效果end 
+</script>
+</body>
+</html>
